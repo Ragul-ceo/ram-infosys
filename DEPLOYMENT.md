@@ -1,6 +1,6 @@
 # Ram Infosys Employee Portal — Deployment Guide
 
-Complete deployment setup for **both frontend and backend** to Render using Docker.
+Complete deployment setup for **both frontend and backend** to Render using Docker + PostgreSQL.
 
 ---
 
@@ -9,8 +9,8 @@ Complete deployment setup for **both frontend and backend** to Render using Dock
 ```
 Ram-infosys/
 ├── server.js                 # Express.js backend
-├── db.js                     # MySQL connection
-├── schema.sql                # Database schema
+├── db.js                     # PostgreSQL connection
+├── schema.sql                # Database schema (PostgreSQL)
 ├── package.json              # Backend dependencies
 ├── Dockerfile.backend        # Backend container
 │
@@ -24,7 +24,7 @@ Ram-infosys/
 │   └── dist/                # Built files (generated)
 │
 ├── Dockerfile.frontend      # Frontend (Nginx) container
-├── docker-compose.yml       # Local orchestration
+├── docker-compose.yml       # Local orchestration (PostgreSQL)
 ├── nginx.conf               # Nginx configuration
 └── .env.example             # Environment template
 ```
@@ -36,7 +36,7 @@ Ram-infosys/
 ### Prerequisites
 - Node.js 18+
 - Docker & Docker Compose
-- MySQL 8.0 (or use Docker)
+- PostgreSQL 15 (or use Docker)
 
 ### 1. Clone & Install Dependencies
 
@@ -54,11 +54,11 @@ NODE_ENV=development
 PORT=4000
 FRONTEND_URL=http://localhost:3000
 
-# Database
+# Database (PostgreSQL)
 DB_HOST=localhost
-DB_PORT=3306
-DB_USER=ram_user
-DB_PASSWORD=ram_password
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
 DB_NAME=ram_infosys
 
 # Frontend
@@ -73,7 +73,7 @@ docker-compose up -d
 ```
 
 This will start:
-- **MySQL**: `localhost:3306`
+- **PostgreSQL**: `localhost:5432`
 - **Backend**: `http://localhost:4000`
 - **Frontend**: `http://localhost:3000`
 
@@ -88,70 +88,77 @@ This will start:
 
 ## 🌐 Deploy to Render
 
-### Step 1: Push Code to GitHub
+Render automatically provides a PostgreSQL database service, making deployment seamless!
 
-```bash
-git init
-git add .
-git commit -m "Initial commit: Ram Infosys Portal with Docker"
-git remote add origin https://github.com/YOUR_USERNAME/RAM-INFOSYS.git
-git branch -M main
-git push -u origin main
-```
+### Step 1: Push Code to GitHub ✅ (Already done!)
 
-### Step 2: Create MySQL Database on Render
+### Step 2: Create PostgreSQL Database on Render
 
 1. Go to [Render Dashboard](https://dashboard.render.com)
-2. Click **New +** → **Database** → **MySQL**
+2. Click **New +** → **Postgres** (not MySQL)
 3. Configure:
    - **Name**: `ram-infosys-db`
-   - **Region**: Choose your region
-   - **MySQL Version**: 8.0
+   - **Database**: `ram_infosys`
+   - **User**: `postgres`
+   - **Region**: Choose your region (US East recommended)
 4. Click **Create Database**
-5. Copy the internal connection string (e.g., `mysql://user:pass@...`)
+5. **Important**: Copy the **Internal Database URL** (looks like `postgresql://user:pass@dpg-....internal:5432/ram_infosys`)
 
 ### Step 3: Deploy Backend (Node.js API)
 
 1. In Render Dashboard, click **New +** → **Web Service**
-2. Select your GitHub repository
+2. Select `Ragul-ceo/ram-infosys` repository
 3. Configure:
    - **Name**: `ram-infosys-api`
    - **Environment**: `Docker`
-   - **Region**: Same as database
+   - **Dockerfile Path**: (leave blank, will auto-detect)
    - **Plan**: Free (or Starter for production)
-4. Under **Advanced**, add **Environment Variables**:
+4. **Advanced** → Add **Environment Variables**:
 
 ```env
 NODE_ENV=production
 PORT=4000
-DB_HOST=<mysql-host-from-connection-string>
-DB_PORT=3306
-DB_USER=<mysql-user>
-DB_PASSWORD=<mysql-password>
+DB_HOST=<postgres-host-from-internal-url>
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=<postgres-password-from-url>
 DB_NAME=ram_infosys
 FRONTEND_URL=https://ram-infosys-portal.onrender.com
 ```
 
 5. Click **Create Web Service**
-6. Wait for deployment. Copy the service URL (e.g., `https://ram-infosys-api.onrender.com`)
+6. Wait ~5 min for build. Copy the service URL (e.g., `https://ram-infosys-api.onrender.com`)
 
 ### Step 4: Deploy Frontend (React + Nginx)
 
 1. In Render Dashboard, click **New +** → **Web Service**
-2. Select your GitHub repository again
+2. Select `Ragul-ceo/ram-infosys` repository
 3. Configure:
    - **Name**: `ram-infosys-portal`
    - **Environment**: `Docker`
    - **Dockerfile Path**: `Dockerfile.frontend`
-   - **Region**: Same as backend
-4. Under **Advanced**, add **Environment Variables**:
+4. **Advanced** → Add **Environment Variables**:
 
 ```env
 VITE_API_URL=https://ram-infosys-api.onrender.com/api
 ```
 
 5. Click **Create Web Service**
-6. Wait for deployment (takes 2-3 min)
+6. Wait 2-3 min for deployment
+
+### 5. Initialize Database Schema
+
+Once PostgreSQL is running:
+
+1. Go to your PostgreSQL database on Render
+2. Click the **Connect** button
+3. Use the connection info to run:
+
+```bash
+psql postgresql://postgres:PASSWORD@HOST:5432/ram_infosys < schema.sql
+```
+
+Or copy the schema.sql content and paste into Render's SQL editor.
 
 ---
 
@@ -172,29 +179,15 @@ If you see the login page, deployment is successful! ✨
 
 ---
 
-## 🗄️ Initialize Database Schema
-
-After MySQL is running, load the schema:
-
-```bash
-# Via Docker (if using docker-compose locally)
-docker exec ram-infosys-db mysql -u root -pram_password ram_infosys < schema.sql
-
-# Or manually via Render MySQL UI
-# Copy schema.sql content into Render's SQL editor
-```
-
----
-
 ## 🔐 Production Checklist
 
-- [ ] Database credentials stored securely (use Render environment variables)
+- [ ] Database credentials stored as environment variables (do NOT commit .env)
 - [ ] `FRONTEND_URL` updated to production URL
 - [ ] `VITE_API_URL` points to production backend
 - [ ] HTTPS enabled (automatic on Render)
-- [ ] Database backups enabled
+- [ ] Database backups enabled (Render feature)
 - [ ] Monitor logs for errors (Render dashboard)
-- [ ] Set up monitoring/alerts if needed
+- [ ] Test login with demo credentials
 
 ---
 
@@ -205,9 +198,9 @@ docker exec ram-infosys-db mysql -u root -pram_password ram_infosys < schema.sql
 |----------|---------|---------|
 | `NODE_ENV` | `production` | Node environment |
 | `PORT` | `4000` | Server port |
-| `DB_HOST` | `mysql.render.com` | Database host |
-| `DB_PORT` | `3306` | Database port |
-| `DB_USER` | `ram_user` | Database username |
+| `DB_HOST` | `dpg-....internal` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | `...` | Database password |
 | `DB_NAME` | `ram_infosys` | Database name |
 | `FRONTEND_URL` | `https://...onrender.com` | CORS origin |
@@ -222,17 +215,18 @@ docker exec ram-infosys-db mysql -u root -pram_password ram_infosys < schema.sql
 ## 🐛 Troubleshooting
 
 ### API Connection Error
-- Check `VITE_API_URL` matches backend URL
+- Check `VITE_API_URL` matches backend URL in frontend env vars
 - Ensure backend service is running and healthy
-- Check Render logs for backend errors
+- Check Render logs for backend errors: Dashboard → Backend Service → Logs
 
 ### Database Connection Error
-- Verify `DB_HOST`, `DB_USER`, `DB_PASSWORD` in environment variables
-- Check MySQL service is running on Render
-- Ensure schema is loaded: [Load Schema](#initialize-database-schema)
+- Verify `DB_HOST`, `DB_USER`, `DB_PASSWORD` in backend env vars
+- Check PostgreSQL service is running on Render
+- Ensure schema is loaded into the database
+- Try connecting directly using Render's connection info
 
 ### CORS Issues
-- Update `FRONTEND_URL` in backend env vars
+- Update `FRONTEND_URL` in backend environment variables
 - Verify Nginx proxy config (`nginx.conf`) is correct
 
 ### Port Conflicts (Local)
@@ -248,13 +242,14 @@ docker-compose up -d
 
 - **Node.js**: `node:18-alpine` (lightweight)
 - **Nginx**: `nginx:alpine` (frontend serving)
-- **MySQL**: `mysql:8.0` (database)
+- **PostgreSQL**: `postgres:15-alpine` (database)
 
 ---
 
 ## 🔗 Useful Links
 
 - [Render Documentation](https://render.com/docs)
+- [PostgreSQL Docs](https://www.postgresql.org/docs)
 - [Docker Docs](https://docs.docker.com)
 - [Express.js Guide](https://expressjs.com)
 - [React + Vite Guide](https://vitejs.dev/guide)
@@ -264,11 +259,11 @@ docker-compose up -d
 ## 📞 Support
 
 For issues:
-1. Check Render **Logs** tab
-2. Review Docker output
-3. Check environment variables are set correctly
-4. Verify database connectivity
+1. Check Render **Logs** tab for each service
+2. Review environment variables are set correctly
+3. Verify database credentials and connectivity
+4. Check CORS headers in browser DevTools
 
 ---
 
-**Deployment Status**: Ready for Production ✅
+**Deployment Status**: Ready for Production with PostgreSQL ✅
